@@ -1,6 +1,6 @@
 TARGETS= main main_tx main_id bm
 
-OPT=-Ofast -g
+OPT=-O3 -g
 
 ARCH=-msse4.2
 
