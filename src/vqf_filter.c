@@ -532,7 +532,7 @@ bool vqf_remove(vqf_filter * restrict filter, uint64_t hash) {
    vqf_metadata * restrict metadata           = &filter->metadata;
    uint64_t                 key_remainder_bits = metadata->key_remainder_bits;
    uint64_t                 range              = metadata->range;
-   vqf_block    * restrict blocks             = filter->blocks
+   vqf_block    * restrict blocks             = filter->blocks;
 
    uint64_t block_index = hash % range;
    uint64_t tag = (hash >> 32) & TAG_MASK; tag += (tag == 0);
