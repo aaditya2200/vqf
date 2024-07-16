@@ -532,6 +532,7 @@ bool vqf_remove(vqf_filter * restrict filter, uint64_t hash) {
    vqf_metadata * restrict metadata           = &filter->metadata;
    uint64_t                 key_remainder_bits = metadata->key_remainder_bits;
    uint64_t                 range              = metadata->range;
+   vqf_block    * restrict blocks             = filter->blocks
 
    uint64_t block_index = hash % range;
    uint64_t tag = (hash >> 32) & TAG_MASK; tag += (tag == 0);
@@ -540,8 +541,16 @@ bool vqf_remove(vqf_filter * restrict filter, uint64_t hash) {
    //printf("Removal: Hash: %llu Tag: %ld Prm: %ld Alt: %ld\n", hash, tag, block_index, alt_block_index);
 
    __builtin_prefetch(&filter->blocks[alt_block_index / QUQU_BUCKETS_PER_BLOCK]);
-
-   return remove_tags(filter, tag, block_index) || remove_tags(filter, tag, alt_block_index);
+   lock(blocks[block_index/QUQU_BUCKETS_PER_BLOCK]);
+   bool block_index_tags = remove_tags(filter, tag, block_index);
+   unlock(blocks[block_index/QUQU_BUCKETS_PER_BLOCK]);
+   if (block_index_tags)
+       return block_index_tags;
+   lock(blocks[alt_block_index/QUQU_BUCKETS_PER_BLOCK]);
+   bool alt_block_index_tags = remove_tags(filter, tag, alt_block_index);
+   unlock(blocks[alt_block_index/QUQU_BUCKETS_PER_BLOCK]);
+   return block_index_tags || alt_block_index_tags;
+   //return remove_tags(filter, tag, block_index) || remove_tags(filter, tag, alt_block_index);
 }
 
 static inline bool check_tags(vqf_filter * restrict filter, uint64_t tag,
@@ -612,7 +621,7 @@ static inline bool check_tags(vqf_filter * restrict filter, uint64_t tag,
 // select(i) - i is the slot index for the end of the run.
 bool vqf_is_present(vqf_filter * restrict filter, uint64_t hash) {
    vqf_metadata * restrict metadata           = &filter->metadata;
-   //vqf_block    * restrict blocks             = filter->blocks;
+   vqf_block    * restrict blocks             = filter->blocks;
    uint64_t                 key_remainder_bits = metadata->key_remainder_bits;
    uint64_t                 range              = metadata->range;
 
@@ -623,8 +632,17 @@ bool vqf_is_present(vqf_filter * restrict filter, uint64_t hash) {
    //printf("Query: Hash: %llu Tag: %ld Prm: %ld Alt: %ld\n", hash, tag, block_index, alt_block_index);
 
    __builtin_prefetch(&filter->blocks[alt_block_index / QUQU_BUCKETS_PER_BLOCK]);
+    lock(blocks[block_index/QUQU_BUCKETS_PER_BLOCK]);
+    bool block_index_tags = check_tags(filter, tag, block_index);
+    unlock(blocks[block_index/QUQU_BUCKETS_PER_BLOCK]);
+    if (block_index_tags)
+        return block_index_tags;
+    lock(blocks[alt_block_index/QUQU_BUCKETS_PER_BLOCK]);
+    bool alt_block_index_tags = check_tags(filter, tag, alt_block_index);
+    unlock(blocks[alt_block_index/QUQU_BUCKETS_PER_BLOCK]);
 
-   return check_tags(filter, tag, block_index) || check_tags(filter, tag, alt_block_index);
+    return block_index_tags || alt_block_index_tags;
+   //return check_tags(filter, tag, block_index) || check_tags(filter, tag, alt_block_index);
 
    /*if (!ret) {*/
    /*printf("tag: %ld offset: %ld\n", tag, block_index % QUQU_SLOTS_PER_BLOCK);*/
